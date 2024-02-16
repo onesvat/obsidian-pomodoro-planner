@@ -1,81 +1,46 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, Setting } from 'obsidian';
 
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-	mySetting: string;
+interface PomodoroSettings {
+	end: string;
+	pomodoro: number;
+	shortBreak: number;
+	longBreak: number;
+	group: number;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+const DEFAULT_SETTINGS: PomodoroSettings = {
+	end: '',
+	pomodoro: 25,
+	shortBreak: 5,
+	longBreak: 15,
+	group: 4
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+
+
+export default class PomodoroPlanner extends Plugin {
+	settings: PomodoroSettings;
 
 	async onload() {
+
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
 		// This adds an editor command that can perform some operation on the current editor instance
 		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+			id: 'generate-pomodoro-plan',
+			name: 'Generate',
+			editorCallback: async (editor: Editor, view: MarkdownView) => {
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+				await this.loadSettings();
+
+				new GeneratePomodoroPlan(this.app, this.settings, (result: string, pomodoroSettings: PomodoroSettings) => {
+					editor.replaceSelection(result);
+					this.saveSettings(pomodoroSettings);
 				}
+				).open();
 			}
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
 	}
 
 	onunload() {
@@ -86,49 +51,283 @@ export default class MyPlugin extends Plugin {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 	}
 
-	async saveSettings() {
-		await this.saveData(this.settings);
+	async saveSettings(settings: PomodoroSettings) {
+		await this.saveData(settings);
 	}
+
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
+class GeneratePomodoroPlan extends Modal {
+	start: string;
+	end: string;
+	pomodoro: string;
+	shortBreak: string;
+	longBreak: string;
+	group: string;
+
+	resultMarkdown: string;
+
+
+	onSubmit: (result: string, pomodoroSettings: PomodoroSettings) => void;
+
+	constructor(app: App, settings: PomodoroSettings, onSubmit: (result: string, pomodoroSettings: PomodoroSettings) => void) {
 		super(app);
+
+		this.end = settings.end;
+		this.pomodoro = settings.pomodoro.toString();
+		this.shortBreak = settings.shortBreak.toString();
+		this.longBreak = settings.longBreak.toString();
+		this.group = settings.group.toString();
+
+		const now = new Date();
+		this.start = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+		this.onSubmit = onSubmit;
 	}
+
+	generatePomodoroPlan() {
+
+		this.resultMarkdown = '';
+
+		const result: Array<string> = [];
+
+		const startTime = parseTime(this.start);
+		const endTimeOrCount = parseTimeOrCount(this.end);
+		const pomodoro = parseInt(this.pomodoro);
+		const shortBreak = parseInt(this.shortBreak);
+		const longBreak = parseInt(this.longBreak);
+		const group = parseInt(this.group);
+
+		const resultEl = this.contentEl.children[7];
+
+		let currentTime = startTime;
+		let groupCount = 0;
+
+		let pomodoroCount = 1;
+		let totalRestTime = 0;
+
+		while (willContinue(currentTime, pomodoroCount, endTimeOrCount)) {
+			if (groupCount === group) {
+				result.push(`${formatTime(currentTime)} - ${formatTime(addMinutes(currentTime, longBreak))} Long Break`);
+				this.resultMarkdown += `- [ ] ${formatTime(currentTime)} - ${formatTime(addMinutes(currentTime, longBreak))} Long Break\n`;
+				currentTime = addMinutes(currentTime, longBreak);
+				groupCount = 0;
+
+				totalRestTime += longBreak;
+			} else {
+
+				if (pomodoroCount > 1)
+					totalRestTime += shortBreak;
+
+				result.push(`${formatTime(currentTime)} - ${formatTime(addMinutes(currentTime, pomodoro))} Pomodoro #${pomodoroCount}`);
+				this.resultMarkdown += `- [ ] ${formatTime(currentTime)} - ${formatTime(addMinutes(currentTime, pomodoro))} Pomodoro #${pomodoroCount}\n`;
+
+				currentTime = addMinutes(currentTime, pomodoro + shortBreak);
+
+				groupCount++;
+				pomodoroCount++;
+			}
+		}
+
+
+		if (pomodoroCount - 1 === 0) {
+			resultEl.setText('');
+			return;
+		}
+
+		const totalWorkTimeHours = Math.floor((pomodoro * (pomodoroCount - 1)) / 60);
+		const totalWorkTimeMinutes = (pomodoro * (pomodoroCount - 1)) % 60;
+
+		const totalRestTimeHours = Math.floor(totalRestTime / 60);
+		const totalRestTimeMinutes = totalRestTime % 60;
+
+		let info = '\n\n';
+
+		info += `  Total Pomodoros: ${pomodoroCount - 1}\n`;
+		info += `  Total Work Time: `;
+		if (totalWorkTimeHours > 0) {
+			info += `${totalWorkTimeHours} hours`;
+			if (totalWorkTimeMinutes > 0) {
+				info += `, ${totalWorkTimeMinutes} minutes`;
+			}
+		} else {
+			info += `${totalWorkTimeMinutes} minutes`;
+		}
+		info += `\n`;
+		info += `  Total Rest Time: `;
+		if (totalRestTimeHours > 0) {
+			info += `${totalRestTimeHours} hours`;
+			if (totalRestTimeMinutes > 0) {
+				info += `, ${totalRestTimeMinutes} minutes`;
+			}
+		} else {
+			info += `${totalRestTimeMinutes} minutes`;
+		}
+		info += `\n`;
+
+		this.resultMarkdown += info;
+		resultEl.setText(result.join("\n") + info);
+
+
+		function willContinue(currentTime: Date, totalPomodoros: number, endTimeOrCount: number | Date) {
+
+			if (typeof endTimeOrCount == 'number') {
+				return totalPomodoros <= endTimeOrCount;
+			}
+
+			return currentTime <= endTimeOrCount;
+		}
+
+		function parseTimeOrCount(timeOrCount: string): Date | number {
+			const time = parseTime(timeOrCount);
+			if (!isNaN(time.getTime())) {
+				return time;
+			}
+			const count = parseInt(timeOrCount);
+			if (!isNaN(count)) {
+				return count;
+			}
+			new Notice('Invalid time or count format');
+			return 0;
+		}
+
+		// Helper function to parse time in hh:mm format
+		function parseTime(time: string): Date {
+			const [hours, minutes] = time.split(':').map(Number);
+			const now = new Date();
+			now.setHours(hours);
+			now.setMinutes(minutes);
+			return now;
+		}
+
+		// Helper function to add minutes to a given time
+		function addMinutes(time: Date, minutes: number): Date {
+			const newTime = new Date(time);
+			newTime.setMinutes(newTime.getMinutes() + minutes);
+			return newTime;
+		}
+
+		// Helper function to format time in hh:mm format
+		function formatTime(time: Date): string {
+			const hours = time.getHours().toString().padStart(2, '0');
+			const minutes = time.getMinutes().toString().padStart(2, '0');
+			return `${hours}:${minutes}`;
+		}
+	}
+
+
 
 	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
+
+		const { contentEl } = this;
+
+		contentEl.createEl("h1", { text: "Generate Pomodoro Plan" });
+
+		new Setting(contentEl)
+			.setName("Start")
+			.addText((text) =>
+				text.
+					setValue(this.start).
+					onChange((value) => {
+						this.start = value
+						this.generatePomodoroPlan();
+					})
+			);
+
+		new Setting(contentEl)
+			.setName("End")
+			.addText((text) =>
+				text.
+					setValue(this.end).
+					onChange((value) => {
+						this.end = value
+						this.generatePomodoroPlan();
+					})
+			);
+
+		new Setting(contentEl)
+			.setName("Pomodoro")
+			.addText((text) =>
+				text.
+					setValue(this.pomodoro).
+					onChange((value) => {
+						this.pomodoro = value
+						this.generatePomodoroPlan();
+					})
+			);
+
+		new Setting(contentEl)
+			.setName("Short Break")
+			.addText((text) =>
+				text.
+					setValue(this.shortBreak).
+					onChange((value) => {
+						this.shortBreak = value
+						this.generatePomodoroPlan();
+					})
+			);
+
+		new Setting(contentEl)
+			.setName("Long Break")
+			.addText((text) =>
+				text.
+					setValue(this.longBreak).
+					onChange((value) => {
+						this.longBreak = value
+						this.generatePomodoroPlan();
+					})
+			);
+
+		new Setting(contentEl)
+			.setName("Group")
+			.addText((text) =>
+				text.
+					setValue(this.group).
+					onChange((value) => {
+						this.group = value
+						this.generatePomodoroPlan();
+					})
+			);
+
+
+		// create code block to show results
+		const resultEl = contentEl.createEl('pre');
+		resultEl.style.whiteSpace = 'pre-wrap';
+
+
+		new Setting(contentEl)
+			.addButton((btn) =>
+				btn
+					.setButtonText("Insert into editor")
+					.setCta()
+					.onClick(() => {
+
+						console.log(this.resultMarkdown);
+
+						if (this.resultMarkdown == '') {
+							new Notice('Please generate the plan first');
+							return;
+						}
+
+						this.close();
+						this.onSubmit(this.resultMarkdown, {
+							end: this.end,
+							pomodoro: parseInt(this.pomodoro),
+							shortBreak: parseInt(this.shortBreak),
+							longBreak: parseInt(this.longBreak),
+							group: parseInt(this.group)
+						});
+
+					})
+			);
+
+		this.generatePomodoroPlan();
 	}
 
+
 	onClose() {
-		const {contentEl} = this;
+		const { contentEl } = this;
 		contentEl.empty();
 	}
 }
 
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
-	}
-}
