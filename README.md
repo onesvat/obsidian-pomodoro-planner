@@ -1,7 +1,14 @@
 # Obsidian Pomodoro Planner
 
-The Obsidian Pomodoro Planner is a simple plugin that generates a daily plan based on the pomodoro technique.
+The Obsidian Pomodoro Planner is a simple plugin that generates a daily plan based on the pomodoro technique with competiple with the Obsidian Day Planner plugin.
 
-To use the plugin, run the "Pomodoro Planner: Generate" command. This will open a popup where you can select variables and generate your daily plan.
+## How to use
 
-The generated plan can be pasted into the current note. It is designed to be used with the Obsidian Day Planner plugin.
+1. Install the plugin
+2. Open the command palette and run the `Pomodoro Planner: Generate` command
+3. The plugin will generate a daily plan based on the pomodoro technique
+4. You may insert the generated plan to the cursor, or copy it to the clipboard
+
+## Screenshots
+
+![Screenshot](pomodoro-planner.png)

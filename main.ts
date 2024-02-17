@@ -1,51 +1,45 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, Setting } from 'obsidian';
+import { App, Editor, Modal, Notice, Plugin, Setting } from 'obsidian';
 
 interface PomodoroSettings {
-	end: string;
 	pomodoro: number;
 	shortBreak: number;
 	longBreak: number;
 	group: number;
+	includeStats: boolean;
+	includeShortBreak: boolean;
+	includeLongBreak: boolean;
 }
 
 const DEFAULT_SETTINGS: PomodoroSettings = {
-	end: '',
 	pomodoro: 25,
 	shortBreak: 5,
 	longBreak: 15,
-	group: 4
+	group: 4,
+	includeStats: true,
+	includeShortBreak: false,
+	includeLongBreak: true
 }
-
-
 
 export default class PomodoroPlanner extends Plugin {
 	settings: PomodoroSettings;
 
 	async onload() {
-
 		await this.loadSettings();
-
-		// This adds an editor command that can perform some operation on the current editor instance
 		this.addCommand({
 			id: 'generate-pomodoro-plan',
 			name: 'Generate',
-			editorCallback: async (editor: Editor, view: MarkdownView) => {
-
+			editorCallback: async (editor: Editor) => {
 				await this.loadSettings();
-
-				new GeneratePomodoroPlan(this.app, this.settings, (result: string, pomodoroSettings: PomodoroSettings) => {
+				new GeneratePomodoroPlan(this.app, this.settings, (result: string) => {
 					editor.replaceSelection(result);
-					this.saveSettings(pomodoroSettings);
-				}
-				).open();
+				}, () => {
+					this.saveSettings(this.settings);
+				}).open();
 			}
 		});
-
 	}
 
-	onunload() {
-
-	}
+	onunload() { }
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -54,131 +48,141 @@ export default class PomodoroPlanner extends Plugin {
 	async saveSettings(settings: PomodoroSettings) {
 		await this.saveData(settings);
 	}
-
 }
 
 class GeneratePomodoroPlan extends Modal {
+
+	settings: PomodoroSettings;
+
 	start: string;
 	end: string;
-	pomodoro: string;
-	shortBreak: string;
-	longBreak: string;
-	group: string;
-
 	resultMarkdown: string;
 
+	onSubmit: (result: string) => void;
+	saveSettings: (settings: PomodoroSettings) => void;
 
-	onSubmit: (result: string, pomodoroSettings: PomodoroSettings) => void;
+	resultEl: HTMLElement;
 
-	constructor(app: App, settings: PomodoroSettings, onSubmit: (result: string, pomodoroSettings: PomodoroSettings) => void) {
+	constructor(app: App, settings: PomodoroSettings, onSubmit: (result: string) => void, saveSettings: (settings: PomodoroSettings) => void) {
 		super(app);
 
-		this.end = settings.end;
-		this.pomodoro = settings.pomodoro.toString();
-		this.shortBreak = settings.shortBreak.toString();
-		this.longBreak = settings.longBreak.toString();
-		this.group = settings.group.toString();
+		this.settings = settings;
 
 		const now = new Date();
 		this.start = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
 		this.onSubmit = onSubmit;
+		this.saveSettings = saveSettings;
 	}
 
 	generatePomodoroPlan() {
 
 		this.resultMarkdown = '';
 
-		const result: Array<string> = [];
-
 		const startTime = parseTime(this.start);
 		const endTimeOrCount = parseTimeOrCount(this.end);
-		const pomodoro = parseInt(this.pomodoro);
-		const shortBreak = parseInt(this.shortBreak);
-		const longBreak = parseInt(this.longBreak);
-		const group = parseInt(this.group);
-
-		const resultEl = this.contentEl.children[7];
+		const pomodoro = this.settings.pomodoro
+		const shortBreak = this.settings.shortBreak;
+		const longBreak = this.settings.longBreak;
+		const group = this.settings.group;
+		const includeStats = this.settings.includeStats;
+		const includeShortBreak = this.settings.includeShortBreak;
+		const includeLongBreak = this.settings.includeLongBreak;
 
 		let currentTime = startTime;
 		let groupCount = 0;
-
-		let pomodoroCount = 1;
 		let totalRestTime = 0;
+		let pomodoroCount = 1;
 
-		while (willContinue(currentTime, pomodoroCount, endTimeOrCount)) {
+		while (willContinue(addMinutes(currentTime, pomodoro), pomodoroCount, endTimeOrCount)) {
+
+
+			this.resultMarkdown += `- [ ] ${formatTime(currentTime)} - ${formatTime(addMinutes(currentTime, this.settings.pomodoro))} Pomodoro #${pomodoroCount}\n`;
+
+			currentTime = addMinutes(currentTime, pomodoro);
+			pomodoroCount++;
+			groupCount++;
+
 			if (groupCount === group) {
-				result.push(`${formatTime(currentTime)} - ${formatTime(addMinutes(currentTime, longBreak))} Long Break`);
-				this.resultMarkdown += `- [ ] ${formatTime(currentTime)} - ${formatTime(addMinutes(currentTime, longBreak))} Long Break\n`;
+
+				if (!willContinue(addMinutes(currentTime, longBreak + pomodoro), pomodoroCount, endTimeOrCount)) break;
+
+				if (includeLongBreak)
+					this.resultMarkdown += `- [ ] ${formatTime(currentTime)} - ${formatTime(addMinutes(currentTime, this.settings.longBreak))} Long Break\n`;
 				currentTime = addMinutes(currentTime, longBreak);
+				totalRestTime += longBreak;
 				groupCount = 0;
 
-				totalRestTime += longBreak;
 			} else {
+				if (!willContinue(addMinutes(currentTime, pomodoro + shortBreak), pomodoroCount, endTimeOrCount)) break;
 
-				if (pomodoroCount > 1)
-					totalRestTime += shortBreak;
 
-				result.push(`${formatTime(currentTime)} - ${formatTime(addMinutes(currentTime, pomodoro))} Pomodoro #${pomodoroCount}`);
-				this.resultMarkdown += `- [ ] ${formatTime(currentTime)} - ${formatTime(addMinutes(currentTime, pomodoro))} Pomodoro #${pomodoroCount}\n`;
+				if (includeShortBreak)
+					this.resultMarkdown += `- [ ] ${formatTime(currentTime)} - ${formatTime(addMinutes(currentTime, this.settings.shortBreak))} Short Break\n`;
 
-				currentTime = addMinutes(currentTime, pomodoro + shortBreak);
-
-				groupCount++;
-				pomodoroCount++;
+				currentTime = addMinutes(currentTime, shortBreak);
+				totalRestTime += shortBreak;
 			}
+
 		}
 
-
 		if (pomodoroCount - 1 === 0) {
-			resultEl.setText('');
+			this.resultEl.setText('');
 			return;
 		}
 
-		const totalWorkTimeHours = Math.floor((pomodoro * (pomodoroCount - 1)) / 60);
-		const totalWorkTimeMinutes = (pomodoro * (pomodoroCount - 1)) % 60;
+		if (includeStats) {
 
-		const totalRestTimeHours = Math.floor(totalRestTime / 60);
-		const totalRestTimeMinutes = totalRestTime % 60;
-
-		let info = '\n\n';
-
-		info += `  Total Pomodoros: ${pomodoroCount - 1}\n`;
-		info += `  Total Work Time: `;
-		if (totalWorkTimeHours > 0) {
-			info += `${totalWorkTimeHours} hours`;
-			if (totalWorkTimeMinutes > 0) {
-				info += `, ${totalWorkTimeMinutes} minutes`;
+			const totalWorkTimeHours = Math.floor((pomodoro * (pomodoroCount - 1)) / 60);
+			const totalWorkTimeMinutes = (pomodoro * (pomodoroCount - 1)) % 60;
+			const totalRestTimeHours = Math.floor(totalRestTime / 60);
+			const totalRestTimeMinutes = totalRestTime % 60;
+			let info = '\n\n';
+			info += `  Total Pomodoros: ${pomodoroCount - 1}\n`;
+			info += `  Total Work Time: `;
+			if (totalWorkTimeHours > 0) {
+				info += `${totalWorkTimeHours} hours`;
+				if (totalWorkTimeMinutes > 0) {
+					info += `, ${totalWorkTimeMinutes} minutes`;
+				}
+			} else {
+				info += `${totalWorkTimeMinutes} minutes`;
 			}
-		} else {
-			info += `${totalWorkTimeMinutes} minutes`;
-		}
-		info += `\n`;
-		info += `  Total Rest Time: `;
-		if (totalRestTimeHours > 0) {
-			info += `${totalRestTimeHours} hours`;
-			if (totalRestTimeMinutes > 0) {
-				info += `, ${totalRestTimeMinutes} minutes`;
+			info += `\n`;
+			info += `  Total Rest Time: `;
+			if (totalRestTimeHours > 0) {
+				info += `${totalRestTimeHours} hours`;
+				if (totalRestTimeMinutes > 0) {
+					info += `, ${totalRestTimeMinutes} minutes`;
+				}
+			} else {
+				info += `${totalRestTimeMinutes} minutes`;
 			}
-		} else {
-			info += `${totalRestTimeMinutes} minutes`;
-		}
-		info += `\n`;
+			info += `\n`;
 
-		this.resultMarkdown += info;
-		resultEl.setText(result.join("\n") + info);
+			this.resultMarkdown += info;
+		}
+
+		if (this.resultEl) {
+			this.resultEl.setText(this.resultMarkdown);
+
+			this.saveSettings(this.settings);
+		}
+
 
 
 		function willContinue(currentTime: Date, totalPomodoros: number, endTimeOrCount: number | Date) {
-
 			if (typeof endTimeOrCount == 'number') {
 				return totalPomodoros <= endTimeOrCount;
 			}
-
 			return currentTime <= endTimeOrCount;
 		}
 
 		function parseTimeOrCount(timeOrCount: string): Date | number {
+			if (!timeOrCount) {
+				return 0;
+			}
+
 			const time = parseTime(timeOrCount);
 			if (!isNaN(time.getTime())) {
 				return time;
@@ -191,7 +195,6 @@ class GeneratePomodoroPlan extends Modal {
 			return 0;
 		}
 
-		// Helper function to parse time in hh:mm format
 		function parseTime(time: string): Date {
 			const [hours, minutes] = time.split(':').map(Number);
 			const now = new Date();
@@ -200,14 +203,12 @@ class GeneratePomodoroPlan extends Modal {
 			return now;
 		}
 
-		// Helper function to add minutes to a given time
 		function addMinutes(time: Date, minutes: number): Date {
 			const newTime = new Date(time);
 			newTime.setMinutes(newTime.getMinutes() + minutes);
 			return newTime;
 		}
 
-		// Helper function to format time in hh:mm format
 		function formatTime(time: Date): string {
 			const hours = time.getHours().toString().padStart(2, '0');
 			const minutes = time.getMinutes().toString().padStart(2, '0');
@@ -215,85 +216,124 @@ class GeneratePomodoroPlan extends Modal {
 		}
 	}
 
-
-
 	onOpen() {
-
 		const { contentEl } = this;
-
 		contentEl.createEl("h1", { text: "Generate Pomodoro Plan" });
 
 		new Setting(contentEl)
-			.setName("Start")
+			.setName("End Time or Pomodoros Count")
+			.setDesc("Set end time in HH:MM format or total pomodoros")
 			.addText((text) =>
-				text.
-					setValue(this.start).
-					onChange((value) => {
-						this.start = value
-						this.generatePomodoroPlan();
-					})
-			);
-
-		new Setting(contentEl)
-			.setName("End")
-			.addText((text) =>
-				text.
-					setValue(this.end).
-					onChange((value) => {
+				text
+					.setValue(this.end)
+					.onChange((value) => {
 						this.end = value
 						this.generatePomodoroPlan();
 					})
 			);
 
 		new Setting(contentEl)
-			.setName("Pomodoro")
+			.setName("Starting Time")
+			.setDesc("The time to start the plan")
 			.addText((text) =>
-				text.
-					setValue(this.pomodoro).
-					onChange((value) => {
-						this.pomodoro = value
+				text
+					.setValue(this.start)
+					.onChange((value) => {
+						this.start = value
 						this.generatePomodoroPlan();
 					})
 			);
 
 		new Setting(contentEl)
-			.setName("Short Break")
+			.setName("Pomodoro Length (minutes)")
+			.setDesc("The length of a pomodoro")
 			.addText((text) =>
-				text.
-					setValue(this.shortBreak).
-					onChange((value) => {
-						this.shortBreak = value
+				text
+					.setValue(this.settings.pomodoro.toString())
+					.onChange((value) => {
+						if (!isNaN(parseInt(value))) {
+							this.settings.pomodoro = parseInt(value);
+							this.generatePomodoroPlan();
+						}
+					})
+			);
+
+		new Setting(contentEl)
+			.setName("Short Break (minutes)")
+			.setDesc("After each pomodoro finished, a short break will be taken.")
+			.addText((text) =>
+				text
+					.setValue(this.settings.shortBreak.toString())
+					.onChange((value) => {
+						if (!isNaN(parseInt(value))) {
+							this.settings.shortBreak = parseInt(value);
+							this.generatePomodoroPlan();
+						}
+					})
+			);
+
+		new Setting(contentEl)
+			.setName("Long Break (minutes)")
+			.setDesc("After each group finished, a long break will be taken.")
+			.addText((text) =>
+				text
+					.setValue(this.settings.longBreak.toString())
+					.onChange((value) => {
+						if (!isNaN(parseInt(value))) {
+							this.settings.longBreak = parseInt(value);
+							this.generatePomodoroPlan();
+						}
+					})
+			);
+
+		new Setting(contentEl)
+			.setName("Group Size (pomodoros)")
+			.setDesc("Long break will be taken after each group")
+			.addText((text) =>
+				text
+					.setValue(this.settings.group.toString())
+					.onChange((value) => {
+						if (!isNaN(parseInt(value))) {
+							this.settings.group = parseInt(value);
+							this.generatePomodoroPlan();
+						}
+					})
+			);
+
+		new Setting(contentEl)
+			.setName("Include Short Break in Plan")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.settings.includeShortBreak)
+					.onChange((value) => {
+						this.settings.includeShortBreak = value;
 						this.generatePomodoroPlan();
 					})
 			);
 
 		new Setting(contentEl)
-			.setName("Long Break")
-			.addText((text) =>
-				text.
-					setValue(this.longBreak).
-					onChange((value) => {
-						this.longBreak = value
+			.setName("Include Long Break in Plan")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.settings.includeLongBreak)
+					.onChange((value) => {
+						this.settings.includeLongBreak = value;
 						this.generatePomodoroPlan();
 					})
 			);
 
 		new Setting(contentEl)
-			.setName("Group")
-			.addText((text) =>
-				text.
-					setValue(this.group).
-					onChange((value) => {
-						this.group = value
+			.setName("Include Stats in Plan")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.settings.includeStats)
+					.onChange((value) => {
+						this.settings.includeStats = value;
 						this.generatePomodoroPlan();
 					})
 			);
 
-
-		// create code block to show results
-		const resultEl = contentEl.createEl('pre');
-		resultEl.style.whiteSpace = 'pre-wrap';
-
+		this.resultEl = contentEl.createEl("pre");
 
 		new Setting(contentEl)
 			.addButton((btn) =>
@@ -301,33 +341,30 @@ class GeneratePomodoroPlan extends Modal {
 					.setButtonText("Insert into editor")
 					.setCta()
 					.onClick(() => {
-
-						console.log(this.resultMarkdown);
-
 						if (this.resultMarkdown == '') {
 							new Notice('Please generate the plan first');
 							return;
 						}
-
 						this.close();
-						this.onSubmit(this.resultMarkdown, {
-							end: this.end,
-							pomodoro: parseInt(this.pomodoro),
-							shortBreak: parseInt(this.shortBreak),
-							longBreak: parseInt(this.longBreak),
-							group: parseInt(this.group)
-						});
-
+						this.onSubmit(this.resultMarkdown);
+					})
+			).addButton((btn) =>
+				btn.setButtonText("Copy to clipboard")
+					.onClick(() => {
+						if (this.resultMarkdown == '') {
+							new Notice('Please generate the plan first');
+							return;
+						}
+						navigator.clipboard.writeText(this.resultMarkdown);
+						new Notice('Copied to clipboard');
 					})
 			);
 
 		this.generatePomodoroPlan();
 	}
 
-
 	onClose() {
 		const { contentEl } = this;
 		contentEl.empty();
 	}
 }
-
