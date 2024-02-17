@@ -1,9 +1,9 @@
 {
-	"id": "obsidian-pomodoro-planner",
+	"id": "pomodoro-planner",
 	"name": "Pomodoro Planner",
-	"version": "1.0.3",
+	"version": "1.0.6",
 	"minAppVersion": "0.15.0",
-	"description": "A simple pomodoro planner for Obsidian.",
+	"description": "Generates a pomodoro schedule plan",
 	"author": "Onur Nesvat",
 	"authorUrl": "https://onurnesvat.com",
 	"isDesktopOnly": false

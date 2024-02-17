@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-pomodoro-planner",
-	"version": "1.0.3",
+	"version": "1.0.6",
 	"description": "Pomodoro Planner for Obsidian",
 	"main": "main.js",
 	"scripts": {
