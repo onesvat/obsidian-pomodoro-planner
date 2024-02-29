@@ -138,8 +138,8 @@ class GeneratePomodoroPlan extends Modal {
 			const totalRestTimeHours = Math.floor(totalRestTime / 60);
 			const totalRestTimeMinutes = totalRestTime % 60;
 			let info = '\n\n';
-			info += `  Total Pomodoros: ${pomodoroCount - 1}\n`;
-			info += `  Total Work Time: `;
+			info += `  Total pomodoros: ${pomodoroCount - 1}\n`;
+			info += `  Total work time: `;
 			if (totalWorkTimeHours > 0) {
 				info += `${totalWorkTimeHours} hours`;
 				if (totalWorkTimeMinutes > 0) {
@@ -149,7 +149,7 @@ class GeneratePomodoroPlan extends Modal {
 				info += `${totalWorkTimeMinutes} minutes`;
 			}
 			info += `\n`;
-			info += `  Total Rest Time: `;
+			info += `  Total rest time: `;
 			if (totalRestTimeHours > 0) {
 				info += `${totalRestTimeHours} hours`;
 				if (totalRestTimeMinutes > 0) {
@@ -221,7 +221,7 @@ class GeneratePomodoroPlan extends Modal {
 		contentEl.createEl("h1", { text: "Generate Pomodoro Plan" });
 
 		new Setting(contentEl)
-			.setName("End Time or Pomodoros Count")
+			.setName("End time or pomodoros count")
 			.setDesc("Set end time in HH:MM format or total pomodoros")
 			.addText((text) =>
 				text
@@ -233,7 +233,7 @@ class GeneratePomodoroPlan extends Modal {
 			);
 
 		new Setting(contentEl)
-			.setName("Starting Time")
+			.setName("Starting time")
 			.setDesc("The time to start the plan")
 			.addText((text) =>
 				text
@@ -245,7 +245,7 @@ class GeneratePomodoroPlan extends Modal {
 			);
 
 		new Setting(contentEl)
-			.setName("Pomodoro Length (minutes)")
+			.setName("Pomodoro length (minutes)")
 			.setDesc("The length of a pomodoro")
 			.addText((text) =>
 				text
@@ -259,7 +259,7 @@ class GeneratePomodoroPlan extends Modal {
 			);
 
 		new Setting(contentEl)
-			.setName("Short Break (minutes)")
+			.setName("Short break (minutes)")
 			.setDesc("After each pomodoro finished, a short break will be taken.")
 			.addText((text) =>
 				text
@@ -273,7 +273,7 @@ class GeneratePomodoroPlan extends Modal {
 			);
 
 		new Setting(contentEl)
-			.setName("Long Break (minutes)")
+			.setName("Long break (minutes)")
 			.setDesc("After each group finished, a long break will be taken.")
 			.addText((text) =>
 				text
@@ -287,7 +287,7 @@ class GeneratePomodoroPlan extends Modal {
 			);
 
 		new Setting(contentEl)
-			.setName("Group Size (pomodoros)")
+			.setName("Group size (pomodoros)")
 			.setDesc("Long break will be taken after each group")
 			.addText((text) =>
 				text
@@ -301,7 +301,7 @@ class GeneratePomodoroPlan extends Modal {
 			);
 
 		new Setting(contentEl)
-			.setName("Include Short Break in Plan")
+			.setName("Include short break in plan")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.settings.includeShortBreak)
@@ -312,7 +312,7 @@ class GeneratePomodoroPlan extends Modal {
 			);
 
 		new Setting(contentEl)
-			.setName("Include Long Break in Plan")
+			.setName("Include long break in plan")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.settings.includeLongBreak)
@@ -323,7 +323,7 @@ class GeneratePomodoroPlan extends Modal {
 			);
 
 		new Setting(contentEl)
-			.setName("Include Stats in Plan")
+			.setName("Include stats in plan")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.settings.includeStats)

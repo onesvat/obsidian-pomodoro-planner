@@ -1,7 +1,7 @@
 {
 	"id": "pomodoro-planner",
 	"name": "Pomodoro Planner",
-	"version": "1.0.6",
+	"version": "1.0.7",
 	"minAppVersion": "0.15.0",
 	"description": "Generates a pomodoro schedule plan",
 	"author": "Onur Nesvat",
